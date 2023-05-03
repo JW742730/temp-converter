@@ -1,10 +1,13 @@
 import 'react-native-gesture-handler';
 import * as React from 'react';
-import { StyleSheet, Text, View, Image, TextInput, Pressable, Alert } from 'react-native';
+import {useState, useEffect} from "react";
+import { StyleSheet, Text, View, Image, TextInput, Pressable, Alert, FlatList, ScrollView } from 'react-native';
 import { Link, NavigationContainer, StackActions } from '@react-navigation/native';
 import * as SplashScreen from 'expo-splash-screen';
 import { createDrawerNavigator } from '@react-navigation/drawer';
-import { color } from 'react-native-reanimated';
+import * as WebBrowser from 'expo-web-browser';
+import Button from "./Button";
+import * as SQLite from "expo-sqlite";
 
 
 SplashScreen.preventAutoHideAsync();
@@ -13,13 +16,56 @@ setTimeout(SplashScreen.hideAsync, 2000);
 const sunPicture = require("./sun.jpg");
 const fourSeasons = require("./fourSeasons.jpg");
 
+function openDatabase() {
+  if (Platform.OS === "web") {
+    return {
+      transaction: () => {
+        return {
+          executeSql: () => {},
+        };
+      },
+    };
+  }
 
+  const db = SQLite.openDatabase("db.db");
+  return db;
+}
+
+const db = openDatabase();
+
+function Temps() {
+  const [temps, setTemps] = useState(null);
+
+  React.useEffect(() => {
+    db.transaction((tx) => {
+      tx.executeSql(
+        'select key, fTemp, cTemp from history;',
+        [],
+        (_, {rows: { _array } }) => setTemps(_array)
+      );
+    });
+  }, []);
+
+  if (temps === null || temps.length === 0) {
+    return null;
+  }
+  return (
+    <View style={styles.container}>
+      {temps.map(({key,fTemp, cTemp}) => (
+        <Text style={styles.history}key={key}>{fTemp}F = {cTemp}C</Text>
+      ))}
+    </View>
+  )
+}
 
 function Home() {
   return(
     <View style={styles.container}>
       <Text style={styles.heading}>History</Text>
       <Text style={styles.paragraphText}>Daniel Gabriel Fahrenheit (1686-1736) was the German physicist who invented the alcohol thermometer in 1709, and the mercury thermometer in 1714. In 1724, he introduced the temperature scale that bears his name - Fahrenheit Scale. Anders Celsius was born in Uppsala, Sweden in 1701, where he succeeded his father as professor of astronomy in 1730. It was there that he built Sweden's first observatory in 1741, the Uppsala Observatory, where he was appointed director. He devised the centigrade scale or "Celsius scale" of temperature in 1742.</Text>
+      <Button info onPress={() => {{WebBrowser.openBrowserAsync("https://www.cliffsnotes.com/cliffsnotes/subjects/sciences/how-did-we-end-up-with-both-fahrenheit-and-celsius-scales")}}}>
+        More Information
+      </Button>    
     </View>
   )
 }
@@ -27,6 +73,33 @@ function Home() {
 function FahrenheitConverter() {
   const [fAmount, onChangeFAmount] = React.useState()
   const [cAmount, onChangeCAmount] = React.useState()
+  const [forceUpdate, forceUpdateId] = useForceUpdate();
+
+  useEffect(() => {
+    db.transaction((tx) => {
+      tx.executeSql(
+        "create table if not exists history (key integer primary key not null, fTemp int, cTemp int);"
+      );
+    });
+  }, []);
+
+  const add = (fTemp, cTemp) => {
+    if (cTemp === "" || cTemp === null) {
+      return false;
+    }
+
+    db.transaction(
+      (tx) => {
+        tx.executeSql("insert into history (fTemp,cTemp) values (?,?)", [cTemp, fTemp]);
+        tx.executeSql("select * from history", [], (_, { rows }) =>
+          console.log(JSON.stringify(rows))
+        );
+      },
+      null,
+      forceUpdate
+    );
+  };
+
   return(
     <View style={styles.container}>
       <Text style={styles.heading}>Fahrenheit to Celsius</Text>
@@ -38,15 +111,24 @@ function FahrenheitConverter() {
         value={fAmount}
       />
       <Pressable style={styles.container}
-        onPress={() => { if (!isNaN(fAmount)) {
+        onPress={() => {
+          if (!isNaN(fAmount)) {
+            add(cAmount, fAmount)
+          }
+        }}
+        onPressIn={() => { 
+          
+          if (!isNaN(fAmount)) {
 
         
-          onChangeCAmount((((fAmount - 32) * 5) / 9).toFixed(2))
-          
+            onChangeCAmount((((fAmount - 32) * 5) / 9).toFixed(0));
+            
+
         }
         else {
           Alert.alert("You must enter a numeric value.")
         }
+        
         }}>
 
       <Text style={styles.buttonStyle}>Convert to Celsius</Text>
@@ -63,6 +145,37 @@ function FahrenheitConverter() {
 function CelsiusConverter() {
   const [cAmount, onChangeCAmount] = React.useState()
   const [fAmount, onChangeFAmount] = React.useState()
+  const [forceUpdate, forceUpdateId] = useForceUpdate();
+
+  useEffect(() => {
+    db.transaction((tx) => {
+      
+      tx.executeSql(
+        "create table if not exists history (key integer primary key not null, fTemp int, cTemp int);"
+      );
+      
+    });
+  }, []);
+
+  const add = (fTemp, cTemp) => {
+    if (cTemp === "" || cTemp === null) {
+      return false;
+    }
+
+    db.transaction(
+      (tx) => {
+        tx.executeSql("insert into history (fTemp,cTemp) values (?,?)", [cTemp, fTemp]);
+        tx.executeSql("select * from history", [], (_, { rows }) =>
+          console.log(JSON.stringify(rows))
+          
+        );
+        
+      },
+      null,
+      forceUpdate
+    );
+  };
+
   return(
     <View style={styles.container}>
       <Text style={styles.heading}>Celsius to Fahrenheit</Text>
@@ -74,10 +187,16 @@ function CelsiusConverter() {
         value={cAmount}
       />
       <Pressable style={styles.container}
-        onPress={() => { if (!isNaN(cAmount)) {
+        onPress={() => {
+          if (!isNaN(fAmount)) {
+            add(cAmount, fAmount)
+          }
+        }}
+        onPressIn={() => { if (!isNaN(cAmount)) {
 
-          onChangeFAmount((((cAmount * 9) / 5) + 32).toFixed(2))
-
+          onChangeFAmount((((cAmount * 9) / 5) + 32).toFixed(0));
+          
+  
         }
         else {
           Alert.alert("You must enter a numeric value.")
@@ -93,6 +212,21 @@ function CelsiusConverter() {
       </Pressable>
     </View>
   )
+}
+
+function CalculationHistory() {
+  return(
+    <View style={styles.container}>
+    <ScrollView>
+      <Temps
+      />
+    </ScrollView>
+      
+    
+    
+    </View>
+  )
+  
 }
 
 const Drawer = createDrawerNavigator();
@@ -132,10 +266,19 @@ export default function App() {
           name="Celsius to Fahrenheit"
           component={CelsiusConverter} 
         />
+        <Drawer.Screen
+          name="Calculation History"
+          component={CalculationHistory} 
+        />
         
       </Drawer.Navigator>
     </NavigationContainer>
   );
+}
+
+function useForceUpdate() {
+  const [value, setValue] = useState(0);
+  return [() => setValue(value + 1), value];
 }
 
 const styles = StyleSheet.create({
@@ -162,8 +305,8 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontSize: 30,
-    marginBottom: 0,
-    marginTop: 10,
+    marginBottom: 50,
+    marginTop: 20,
     fontWeight: 'bold',
   },
   drawer: {
@@ -182,6 +325,10 @@ const styles = StyleSheet.create({
   },
   paragraphText: {
     fontSize: 20,
-    padding: 7
+    padding: 7,
+    marginBottom: 50,
+  },
+  history: {
+    fontSize: 20,
   }
 });
